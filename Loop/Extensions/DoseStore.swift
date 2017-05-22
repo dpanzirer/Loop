@@ -11,18 +11,17 @@ import MinimedKit
 
 
 // Bridges support for MinimedKit data types
-extension LoopDataManager {
+extension DoseStore {
     /**
      Adds and persists new pump events.
      */
-    func addPumpEvents(_ pumpEvents: [TimestampedHistoryEvent], completion: @escaping (_ error: DoseStore.DoseStoreError?) -> Void) {
+    func add(_ pumpEvents: [TimestampedHistoryEvent], completionHandler: @escaping (_ error: DoseStore.DoseStoreError?) -> Void) {
         var events: [NewPumpEvent] = []
         var lastTempBasalAmount: DoseEntry?
         var title: String
 
         for event in pumpEvents {
             var dose: DoseEntry?
-            var eventType: InsulinKit.PumpEventType?
 
             switch event.pumpEvent {
             case let bolus as BolusNormalPumpEvent:
@@ -54,16 +53,14 @@ extension LoopDataManager {
                         unit: amount.unit
                     )
                 }
-            case is PrimePumpEvent:
-                eventType = .prime
             default:
                 break
             }
 
             title = String(describing: event.pumpEvent)
-            events.append(NewPumpEvent(date: event.date, dose: dose, isMutable: event.isMutable(), raw: event.pumpEvent.rawData, title: title, type: eventType))
+            events.append(NewPumpEvent(date: event.date, dose: dose, isMutable: event.isMutable(), raw: event.pumpEvent.rawData, title: title))
         }
 
-        addPumpEvents(events, completion: completion)
+        addPumpEvents(events, completionHandler: completionHandler)
     }
 }

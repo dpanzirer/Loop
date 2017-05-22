@@ -7,22 +7,21 @@
 //
 
 import Foundation
-import LoopUI
 import xDripG5
 
 
 extension Glucose: SensorDisplayable {
-    public var isStateValid: Bool {
+    var isStateValid: Bool {
         return state == .ok && status == .ok
     }
 
-    public var stateDescription: String {
+    var stateDescription: String {
         let status: String
         switch self.status {
         case .ok:
             status = ""
         case .lowBattery:
-            status = NSLocalizedString("Low Battery", comment: "The description of a low G5 transmitter battery with a leading space")
+            status = NSLocalizedString(" Low Battery", comment: "The description of a low G5 transmitter battery with a leading space")
         case .unknown(let value):
             status = String(format: "%02x", value)
         }
@@ -30,7 +29,7 @@ extension Glucose: SensorDisplayable {
         return String(format: "%1$@ %2$@", String(describing: state), status)
     }
 
-    public var trendType: GlucoseTrend? {
+    var trendType: GlucoseTrend? {
         guard trend < Int(Int8.max) else {
             return nil
         }
@@ -53,7 +52,7 @@ extension Glucose: SensorDisplayable {
         }
     }
 
-    public var isLocal: Bool {
+    var isLocal: Bool {
         return true
     }
 }

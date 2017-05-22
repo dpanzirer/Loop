@@ -7,7 +7,6 @@
 //
 
 import UIKit
-import LoopUI
 
 
 final class ChartTableViewCell: UITableViewCell {

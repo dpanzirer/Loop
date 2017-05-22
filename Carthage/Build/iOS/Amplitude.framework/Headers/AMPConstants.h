@@ -4,7 +4,6 @@
 
 extern NSString *const kAMPLibrary;
 extern NSString *const kAMPPlatform;
-extern NSString *const kAMPOSName;
 extern NSString *const kAMPVersion;
 extern NSString *const kAMPEventLogDomain;
 extern NSString *const kAMPEventLogUrl;

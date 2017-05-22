@@ -62,17 +62,18 @@ final class WatchDataManager: NSObject, WCSessionDelegate {
     private var lastComplicationContext: WatchContext?
 
     private let minTrendDrift: Double = 20
-    private lazy var minTrendUnit = HKUnit.milligramsPerDeciliter()
+    private lazy var minTrendUnit = HKUnit.milligramsPerDeciliterUnit()
 
     private func sendWatchContext(_ context: WatchContext) {
         if let session = watchSession, session.isPaired && session.isWatchAppInstalled {
+
             let complicationShouldUpdate: Bool
 
             if let lastContext = lastComplicationContext,
                 let lastGlucose = lastContext.glucose, let lastGlucoseDate = lastContext.glucoseDate,
                 let newGlucose = context.glucose, let newGlucoseDate = context.glucoseDate
             {
-                let enoughTimePassed = newGlucoseDate.timeIntervalSince(lastGlucoseDate).minutes >= 30
+                let enoughTimePassed = newGlucoseDate.timeIntervalSince(lastGlucoseDate as Date).minutes >= 30
                 let enoughTrendDrift = abs(newGlucose.doubleValue(for: minTrendUnit) - lastGlucose.doubleValue(for: minTrendUnit)) >= minTrendDrift
 
                 complicationShouldUpdate = enoughTimePassed || enoughTrendDrift
@@ -93,49 +94,56 @@ final class WatchDataManager: NSObject, WCSessionDelegate {
         }
     }
 
-    private func createWatchContext(_ completion: @escaping (_ context: WatchContext?) -> Void) {
-        let loopManager = deviceDataManager.loopManager!
+    private func createWatchContext(_ completionHandler: @escaping (_ context: WatchContext?) -> Void) {
 
-        let glucose = loopManager.glucoseStore.latestGlucose
-        let reservoir = loopManager.doseStore.lastReservoirValue
+        guard let glucoseStore = self.deviceDataManager.glucoseStore else {
+            completionHandler(nil)
+            return
+        }
 
-        loopManager.glucoseStore.preferredUnit { (unit, error) in
-            loopManager.getLoopState { (manager, state) in
-                let eventualGlucose = state.predictedGlucose?.last
-                let context = WatchContext(glucose: glucose, eventualGlucose: eventualGlucose, glucoseUnit: unit)
-                context.reservoir = reservoir?.unitVolume
+        let glucose = deviceDataManager.glucoseStore?.latestGlucose
+        let reservoir = deviceDataManager.doseStore.lastReservoirValue
+        let maxBolus = deviceDataManager.maximumBolus
 
-                context.loopLastRunDate = state.lastLoopCompleted
-                context.recommendedBolusDose = try? state.recommendBolus().amount
-                context.maxBolus = manager.settings.maximumBolus
+        deviceDataManager.loopManager.getLoopStatus { (predictedGlucose, _, recommendedTempBasal, lastTempBasal, lastLoopCompleted, _, _, error) in
+            let eventualGlucose = predictedGlucose?.last
 
-                if let trend = self.deviceDataManager.sensorInfo?.trendType {
-                    context.glucoseTrendRawValue = trend.rawValue
+            self.deviceDataManager.loopManager.getRecommendedBolus { (units, error) in
+                glucoseStore.preferredUnit { (unit, error) in
+                    let context = WatchContext(glucose: glucose, eventualGlucose: eventualGlucose, glucoseUnit: unit)
+                    context.reservoir = reservoir?.unitVolume
+
+                    context.loopLastRunDate = lastLoopCompleted
+                    context.recommendedBolusDose = units
+                    context.maxBolus = maxBolus
+
+                    if let trend = self.deviceDataManager.sensorInfo?.trendType {
+                        context.glucoseTrend = trend
+                    }
+
+                    completionHandler(context)
                 }
-
-                completion(context)
             }
         }
     }
 
     private func addCarbEntryFromWatchMessage(_ message: [String: Any], completionHandler: ((_ units: Double?) -> Void)? = nil) {
-        if let carbEntry = CarbEntryUserInfo(rawValue: message) {
+        if let carbStore = deviceDataManager.carbStore, let carbEntry = CarbEntryUserInfo(rawValue: message) {
             let newEntry = NewCarbEntry(
-                quantity: HKQuantity(unit: deviceDataManager.loopManager.carbStore.preferredUnit, doubleValue: carbEntry.value),
+                quantity: HKQuantity(unit: carbStore.preferredUnit, doubleValue: carbEntry.value),
                 startDate: carbEntry.startDate,
                 foodType: nil,
-                absorptionTime: carbEntry.absorptionTimeType.absorptionTimeFromDefaults(deviceDataManager.loopManager.carbStore.defaultAbsorptionTimes)
+                absorptionTime: carbEntry.absorptionTimeType.absorptionTimeFromDefaults(carbStore.defaultAbsorptionTimes)
             )
 
-            deviceDataManager.loopManager.addCarbEntryAndRecommendBolus(newEntry) { (result) in
-                switch result {
-                case .success(let recommendation):
-                    AnalyticsManager.sharedManager.didAddCarbsFromWatch(carbEntry.value)
-                    completionHandler?(recommendation?.amount)
-                case .failure(let error):
+            deviceDataManager.loopManager.addCarbEntryAndRecommendBolus(newEntry) { (units, error) in
+                if let error = error {
                     self.deviceDataManager.logger.addError(error, fromSource: error is CarbStore.CarbStoreError ? "CarbStore" : "Bolus")
-                    completionHandler?(nil)
+                } else {
+                    AnalyticsManager.sharedManager.didAddCarbsFromWatch(carbEntry.value)
                 }
+
+                completionHandler?(units)
             }
         } else {
             completionHandler?(nil)
@@ -148,12 +156,14 @@ final class WatchDataManager: NSObject, WCSessionDelegate {
         switch message["name"] as? String {
         case CarbEntryUserInfo.name?:
             addCarbEntryFromWatchMessage(message) { (units) in
-                replyHandler(BolusSuggestionUserInfo(recommendedBolus: units ?? 0, maxBolus: self.deviceDataManager.loopManager.settings.maximumBolus).rawValue)
+                replyHandler(BolusSuggestionUserInfo(recommendedBolus: units ?? 0, maxBolus: self.deviceDataManager.maximumBolus).rawValue)
             }
         case SetBolusUserInfo.name?:
             if let bolus = SetBolusUserInfo(rawValue: message as SetBolusUserInfo.RawValue) {
-                self.deviceDataManager.enactBolus(units: bolus.value, at: bolus.startDate) { (error) in
-                    if error == nil {
+                self.deviceDataManager.enactBolus(units: bolus.value) { (error) in
+                    if error != nil {
+                        NotificationManager.sendBolusFailureNotificationForAmount(bolus.value, atStartDate: bolus.startDate)
+                    } else {
                         AnalyticsManager.sharedManager.didSetBolusFromWatch(bolus.value)
                     }
 

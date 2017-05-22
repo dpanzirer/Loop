@@ -7,13 +7,12 @@
 //
 
 import LoopKit
-import HealthKit
 
 
 /// Convenience static constructors used to contain common configuration
 extension TextFieldTableViewController {
     typealias T = TextFieldTableViewController
-    
+
     private static let valueNumberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
 
@@ -85,5 +84,5 @@ extension TextFieldTableViewController {
         }
 
         return vc
-    }    
+    }
 }
