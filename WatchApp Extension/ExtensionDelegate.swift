@@ -9,7 +9,6 @@
 import WatchConnectivity
 import WatchKit
 import os
-import UserNotifications
 
 
 final class ExtensionDelegate: NSObject, WKExtensionDelegate {
@@ -27,8 +26,8 @@ final class ExtensionDelegate: NSObject, WKExtensionDelegate {
         // It seems, according to [this sample code](https://developer.apple.com/library/prerelease/content/samplecode/QuickSwitch/Listings/QuickSwitch_WatchKit_Extension_ExtensionDelegate_swift.html#//apple_ref/doc/uid/TP40016647-QuickSwitch_WatchKit_Extension_ExtensionDelegate_swift-DontLinkElementID_8)
         // that WCSession activation and delegation and WKWatchConnectivityRefreshBackgroundTask don't have any determinism,
         // and that KVO is the "recommended" way to deal with it.
-        session.addObserver(self, forKeyPath: #keyPath(WCSession.activationState), options: [], context: nil)
-        session.addObserver(self, forKeyPath: #keyPath(WCSession.hasContentPending), options: [], context: nil)
+        session.addObserver(self, forKeyPath: "activationState", options: [], context: nil)
+        session.addObserver(self, forKeyPath: "hasContentPending", options: [], context: nil)
 
         session.activate()
     }
@@ -41,7 +40,6 @@ final class ExtensionDelegate: NSObject, WKExtensionDelegate {
 
     func applicationDidFinishLaunching() {
         // Perform any final initialization of your application.
-        UNUserNotificationCenter.current().delegate = self
     }
 
     func applicationDidBecomeActive() {
@@ -168,13 +166,6 @@ extension ExtensionDelegate: WCSessionDelegate {
         if !(userInfo["name"] is String) {
             updateContext(userInfo)
         }
-    }
-}
-
-
-extension ExtensionDelegate: UNUserNotificationCenterDelegate {
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.badge, .sound, .alert])
     }
 }
 

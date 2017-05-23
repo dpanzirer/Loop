@@ -82,8 +82,6 @@ typedef NS_ENUM(NSUInteger, SubgRfspyVersionState) {
 
 @property (nonatomic) BOOL timerTickEnabled;
 
-@property (nonatomic) uint32_t idleTimeoutMS;
-
 /**
  Initializes the device with a specified peripheral
 
